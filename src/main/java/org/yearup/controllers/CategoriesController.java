@@ -1,70 +1,167 @@
 package org.yearup.controllers;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.yearup.data.CategoryDao;
-import org.yearup.data.ProductDao;
-import org.yearup.models.Category;
-import org.yearup.models.Product;
+import org.springframework.beans.factory.annotation.Autowired; // Lets Spring inject dependencies into constructor
+import org.springframework.http.HttpStatus;                  // HTTP status codes like 201, 404, etc
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;            // Spring REST annotations RestController, GetMapping
+import org.springframework.web.server.ResponseStatusException;   // return errors like 404/500
+import org.yearup.data.CategoryDao;                          // DAO interface for categories
+import org.yearup.data.ProductDao;                           // DAO interface for products
+import org.yearup.models.Category;                           // Category model
+import org.yearup.models.Product;                            // Product model
 
 import java.util.List;
 
-// add the annotations to make this a REST controller
-// add the annotation to make this controller the endpoint for the following url
-    // http://localhost:8080/categories
-// add annotation to allow cross site origin requests
+@RestController // Makes this class a REST controller that returns JSON
+@RequestMapping("/categories") // Base URL for this controller which is: http://localhost:8080/categories
+@CrossOrigin // Allows the website to call my API
 public class CategoriesController
 {
     private CategoryDao categoryDao;
     private ProductDao productDao;
 
+    // Spring will inject the DAOs into this controller
+    @Autowired
+    public CategoriesController(CategoryDao categoryDao, ProductDao productDao)
+    {
+        // this saves the injected DAOs so our methods can use them
+        this.categoryDao = categoryDao;
+        this.productDao = productDao;
+    }
 
-    // create an Autowired controller to inject the categoryDao and ProductDao
-
-    // add the appropriate annotation for a get action
+    @GetMapping("") // Get /categories
     public List<Category> getAll()
     {
-        // find and return all categories
-        return null;
+        try
+        {
+            // this Ask the dao for all categories and return them as json
+            return categoryDao.getAllCategories();
+        }
+        catch (Exception ex)
+        {
+            // If something goes wrong this, returns 500
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error getting categories.");
+        }
     }
 
-    // add the appropriate annotation for a get action
+    @GetMapping("/{id}") // get /categories/ id
     public Category getById(@PathVariable int id)
     {
-        // get the category by id
-        return null;
+        try
+        {
+            // asks the dao for the category with this id
+            Category category = categoryDao.getById(id);
+
+            // If the dao returns null, that means the id wasn't found - so it returns 404
+            if (category == null)
+            {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found.");
+            }
+
+            // Returns the category as json
+            return category;
+        }
+        catch (ResponseStatusException ex)
+        {
+            // If its already decided it's a 404 or another status, rethrows the error unchanged
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            // Any unexpected error becomes a 500
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error getting category.");
+        }
     }
 
-    // the url to return all products in category 1 would look like this
-    // https://localhost:8080/categories/1/products
-    @GetMapping("{categoryId}/products")
+    // This url returns all products in category 1:
+    // http://localhost:8080/categories/1/products
+    @GetMapping("{categoryId}/products") // get /categories/categoryId/products
     public List<Product> getProductsById(@PathVariable int categoryId)
     {
-        // get a list of product by categoryId
-        return null;
+        try
+        {
+            // Asks productDao for products in this category
+            return productDao.listByCategoryId(categoryId);
+        }
+        catch (Exception ex)
+        {
+            // If something fails, returns 500
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error getting products by category.");
+        }
     }
 
-    // add annotation to call this method for a POST action
-    // add annotation to ensure that only an ADMIN can call this function
+    @PostMapping("") // post /categories
+    @PreAuthorize("hasRole('ROLE_ADMIN')") // Only admin can create categories
+    @ResponseStatus(HttpStatus.CREATED) // If it is successful, returns 201
     public Category addCategory(@RequestBody Category category)
     {
-        // insert the category
-        return null;
+        try
+        {
+            // Inserts the category and returns the created category
+            return categoryDao.create(category);
+        }
+        catch (Exception ex)
+        {
+            // Any error becomes 500
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error creating category.");
+        }
     }
 
-    // add annotation to call this method for a PUT (update) action - the url path must include the categoryId
-    // add annotation to ensure that only an ADMIN can call this function
+    @PutMapping("/{id}") // put /categories/id
+    @PreAuthorize("hasRole('ROLE_ADMIN')") // Only admins can update categories
+    @ResponseStatus(HttpStatus.NO_CONTENT) // Update success should return 204
     public void updateCategory(@PathVariable int id, @RequestBody Category category)
     {
-        // update the category by id
+        try
+        {
+            // makes sure the category object has the same id as the URL
+            category.setCategoryId(id);
+
+            // If the id doesn't exist, the dao might update 0 rows.
+            // this will check the existence first to return a clean 404 status
+            Category existing = categoryDao.getById(id);
+            if (existing == null)
+            {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found.");
+            }
+
+            // Performs the update
+            categoryDao.update(id, category);
+        }
+        catch (ResponseStatusException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error updating category.");
+        }
     }
 
-
-    // add annotation to call this method for a DELETE action - the url path must include the categoryId
-    // add annotation to ensure that only an ADMIN can call this function
+    @DeleteMapping("/{id}") // DELETE /categories/id
+    @PreAuthorize("hasRole('ROLE_ADMIN')") // Only ADMIN can delete categories
+    @ResponseStatus(HttpStatus.NO_CONTENT) // Delete success should return 204
     public void deleteCategory(@PathVariable int id)
     {
-        // delete the category by id
+        try
+        {
+            // this checks if it exists first so it can return 404 if not found
+            Category existing = categoryDao.getById(id);
+            if (existing == null)
+            {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found.");
+            }
+
+            // Deletes by id
+            categoryDao.delete(id);
+        }
+        catch (ResponseStatusException ex)
+        {
+            throw ex;
+        }
+        catch (Exception ex)
+        {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error deleting category.");
+        }
     }
 }
