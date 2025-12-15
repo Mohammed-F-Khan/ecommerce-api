@@ -21,43 +21,78 @@ public class MySqlProductDao extends MySqlDaoBase implements ProductDao
     @Override
     public List<Product> search(Integer categoryId, BigDecimal minPrice, BigDecimal maxPrice, String subCategory)
     {
+        // This list holds all matching products found in the database
         List<Product> products = new ArrayList<>();
 
-        String sql = "SELECT * FROM products " +
-                "WHERE (category_id = ? OR ? = -1) " +
-                "   AND (price <= ? OR ? = -1) " +
-                "   AND (subcategory = ? OR ? = '') ";
+    /*
 
-        categoryId = categoryId == null ? -1 : categoryId;
-        minPrice = minPrice == null ? new BigDecimal("-1") : minPrice;
-        maxPrice = maxPrice == null ? new BigDecimal("-1") : maxPrice;
-        subCategory = subCategory == null ? "" : subCategory;
+        We want to be able to filter by ANY combination of filters the user provides, so..
+        we use values to mean - ignore this filter:
+            categoryId = -1     = ignore category filter
+            minPrice = -1       = ignore min price filter
+            maxPrice = -1       = ignore max price filter
+            subCategory = ""    = ignore subcategory filter
+
+        Example:
+        - If categoryId is 2:
+            (category_id = 2 or 2 = -1)  only category 2 matches
+        - If categoryId is -1:
+            (category_id = -1 or -1 = -1) => TRUE for every row (filter ignored)
+     */
+        String sql =
+                "SELECT * FROM products " +
+                        "WHERE (category_id = ? OR ? = -1) " +          // category filter (or ignore)
+                        "  AND (price >= ? OR ? = -1) " +               // minPrice filter (or ignore)
+                        "  AND (price <= ? OR ? = -1) " +               // maxPrice filter (or ignore)
+                        "  AND (subcategory = ? OR ? = '') ";           // subCategory filter (or ignore)
+
+        // If a filter was not provided (null), this converts it into a value that means "ignore"
+        categoryId = (categoryId == null) ? -1 : categoryId;               // -1 means ignore category filter
+        minPrice = (minPrice == null) ? new BigDecimal("-1") : minPrice;   // -1 means ignore min price filter
+        maxPrice = (maxPrice == null) ? new BigDecimal("-1") : maxPrice;   // -1 means ignore max price filter
+        subCategory = (subCategory == null) ? "" : subCategory;            // "" means ignore subcategory filter
 
         try (Connection connection = getConnection())
         {
+            // Prepares the SQL statement so it can plug in values using ?
             PreparedStatement statement = connection.prepareStatement(sql);
-            statement.setInt(1, categoryId);
-            statement.setInt(2, categoryId);
-            statement.setBigDecimal(3, minPrice);
-            statement.setBigDecimal(4, minPrice);
-            statement.setString(5, subCategory);
-            statement.setString(6, subCategory);
 
+            // 1-2 category filter values
+            statement.setInt(1, categoryId);  // category_id = ?
+            statement.setInt(2, categoryId);  // ? = -1 means ignore
+
+            // 3-4 min price filter values
+            statement.setBigDecimal(3, minPrice); // price >= ?
+            statement.setBigDecimal(4, minPrice); // ? = -1 means ignore
+
+            // 5-6 max price filter values
+            statement.setBigDecimal(5, maxPrice); // price <= ?
+            statement.setBigDecimal(6, maxPrice); // ? = -1 means ignore
+
+            // 7-8 subcategory filter values
+            statement.setString(7, subCategory);  // subcategory = ?
+            statement.setString(8, subCategory);  // ? = " " means ignore
+
+            // Executes the query and gets matching rows as a result
             ResultSet row = statement.executeQuery();
 
+            // this loops through each row returned and converts it into a Product object
             while (row.next())
             {
-                Product product = mapRow(row);
-                products.add(product);
+                Product product = mapRow(row); // mapRow reads columns and builds a Product
+                products.add(product);         // adds product to the result list
             }
         }
         catch (SQLException e)
         {
+            // If SQL fails, crashes in a way so controller returns 500
             throw new RuntimeException(e);
         }
 
+        // Returns the filtered list of products
         return products;
     }
+
 
     @Override
     public List<Product> listByCategoryId(int categoryId)

@@ -81,10 +81,24 @@ public class ProductsController
     {
         try
         {
-            productDao.create(product);
+            // First checks if the product exists
+            var existing = productDao.getById(id);
+
+            // If product does not exist, returns 404
+            if(existing == null)
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+
+            // Updates the existing product using the DAO update method
+            productDao.update(id, product);
+        }
+        catch(ResponseStatusException ex)
+        {
+            // If already decided that it's a 404 or other status, keeps it
+            throw ex;
         }
         catch(Exception ex)
         {
+            // Any other error becomes a 500
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Oops... our bad.");
         }
     }

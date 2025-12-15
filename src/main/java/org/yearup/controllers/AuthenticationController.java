@@ -68,31 +68,50 @@ public class AuthenticationController {
 
     @ResponseStatus(HttpStatus.CREATED)
     @RequestMapping(value = "/register", method = RequestMethod.POST)
-    public ResponseEntity<User> register(@Valid @RequestBody RegisterUserDto newUser) {
-
+    public ResponseEntity<User> register(@Valid @RequestBody RegisterUserDto newUser)
+    {
         try
         {
+            // 1) Check if the username already exists
             boolean exists = userDao.exists(newUser.getUsername());
             if (exists)
             {
+                // 400 or 409
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User Already Exists.");
             }
 
-            // create user
-            User user = userDao.create(new User(0, newUser.getUsername(), newUser.getPassword(), newUser.getRole()));
+            // Forces the role for new registered users
+            // tests expect a normal user, not admin
+            String role = "ROLE_USER";
 
-            // create profile
+            // 3) Create the user
+            User user = userDao.create(new User(
+                    0,                        // user_id (0 because Data base auto-generates it)
+                    newUser.getUsername(),     // username from request
+                    newUser.getPassword(),     // raw password
+                    role                       // forces ROLE_USER so Database never receives null
+            ));
+
+            // 4) Creates the profile for the new user
             Profile profile = new Profile();
-            profile.setUserId(user.getId());
-            profileDao.create(profile);
+            profile.setUserId(user.getId());  // connects profile to the new created user
+            profileDao.create(profile);        // inserts profile row
 
+            // 5) Returns 201 Created plus the user object
             return new ResponseEntity<>(user, HttpStatus.CREATED);
+        }
+        catch (ResponseStatusException ex)
+        {
+            // If we throw a 400, keep it
+            throw ex;
         }
         catch (Exception e)
         {
+            // Any other error becomes 500
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Oops... our bad.");
         }
     }
+
 
 }
 
