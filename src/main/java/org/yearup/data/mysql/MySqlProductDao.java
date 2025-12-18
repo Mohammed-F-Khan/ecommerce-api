@@ -80,7 +80,7 @@ public class MySqlProductDao extends MySqlDaoBase implements ProductDao
             while (row.next())
             {
                 Product product = mapRow(row); // mapRow reads columns and builds a Product
-                products.add(product);         // adds product to the result list
+                products.add(product);         // adds p roduct to the result list
             }
         }
         catch (SQLException e)
